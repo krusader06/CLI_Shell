@@ -5,6 +5,9 @@
  * @author Colton Crandell
  * @revision history:
  * - 1.0: 5-18-2020 (Crandell) Original
+ * - 1.1: 5-19-2020 (Crandell)
+ * 		Added an extra response code to handle feedback from the function pointer -- "RESPONSE_FNC_ERR"
+ * 		Updated Shell Version to 1.1.0
  *
  * COPYRIGHT NOTICE: (c) 2020.  All rights reserved.
  */
@@ -29,8 +32,8 @@
   */
 
 #define SHELL_MAJOR_VER			1
-#define SHELL_MINOR_VER			0
-#define SHELL_REV				1
+#define SHELL_MINOR_VER			1
+#define SHELL_REV				0
 
 /**
   * @brief  Misc Defines
@@ -57,7 +60,7 @@ typedef struct shellParserOutputTypeDef	shellParserOutput_t;
 typedef enum shellErrorTypeDef shell_error;
 
 // Function Pointer for the function to run for each command.
-typedef shell_error(*shellRunner_t)(shellParserOutput_t*);
+typedef shell_error(*shellBridge_t)(shellParserOutput_t*);
 
 /**
   * @brief  Argument Tokens. Used to differentiate different arguments within a received command string.
@@ -109,9 +112,10 @@ typedef enum {
   * @brief  Response codes for command/argument error checking.
   */
 typedef enum {
-	RESPONSE_OK,
-	RESPONSE_CMD_ERR,
-	RESPONSE_ARG_ERR
+	RESPONSE_OK,				/*!< Respond OK			*/
+	RESPONSE_FNC_ERR,			/*!< Function Error		*/
+	RESPONSE_CMD_ERR,			/*!< Command Error		*/
+	RESPONSE_ARG_ERR			/*!< Argument Error		*/
 } responseCode_t;
 
 /*------------------------------ PARSER STRUCTURES ------------------------------------*/
@@ -121,8 +125,6 @@ typedef enum {
   */
 typedef struct {
 	uint8_t argContents[SHELL_ARG_LEN];		/*!< Pointer to the argument content string	*/
-	uint32_t argContLen;					/*!< Argument String Length					*/
-
 	argToken_t argToken;					/*!< Argument Token							*/
 } shellArgument_t;
 
@@ -157,7 +159,7 @@ typedef struct {
 typedef struct {
 	char* cmdName;							/*!< Pointer to the Command Name			*/
 	char* helpDesc;							/*!< Pointer to the Help Description		*/
-	shellRunner_t runner;					/*!< Runner for the associated function		*/
+	shellBridge_t bridge;					/*!< Runner for the associated function		*/
 	uint8_t numArgs;						/*!< Number of Arguments					*/
 	shellArgTemplate_t cmdArgsTable[MAX_ARGUMENTS];
 } shellCmdTemplate_t;
@@ -193,8 +195,7 @@ void rxShellInput(uint8_t* Buf, uint32_t *Len);
 
 shell_error checkShellStatus(void);
 
-shell_error HelpRunner(shellParserOutput_t* package);
-shell_error PingRunner(shellParserOutput_t* package);
+shell_error HelpBridge(shellParserOutput_t* package);
 
 #endif // CLI_SHELL_H_
 

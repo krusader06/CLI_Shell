@@ -5,6 +5,8 @@
  * @author Colton Crandell
  * @revision history:
  * - 1.0: 5-18-2020 (Crandell) Original
+ * - 1.1: 5-19-2020 Added function which cleans the parser output prior to reloading it.
+ * 					Also added function pointer feedback so that the shell can relay "OK" or "Function Error"
  *
  * Usage and Installation Notes:
  *  - "rxShellInput()" should be called when a command has been issued. In the case of USB CLI,
@@ -45,6 +47,7 @@ shellBufferHandle_t shellBuffer;		/*!< Global Command Buffer Storage		*/
  * PRIVATE PROTOTYPES
  *******************************************************************************/
 shell_error scrubWhiteSpace(void);
+shell_error cleanParserOutput(shellParserOutput_t* cmdParseOut);
 argToken_t getTokenFromChar(char chrToken);
 shell_error exctractCommand(shellParserOutput_t* cmdParseOut);
 shell_error extractArguments(shellParserOutput_t* cmdParseOut);
@@ -103,6 +106,26 @@ shell_error scrubWhiteSpace(void) {
 
 	// Update the received Length
 	shellBuffer.rxLen = currentLength;
+	return status;
+}
+
+/**
+  * @brief  Cleans and prepares the parser output. Basically just sets everything to 0.
+  * @param[IN] cmdParseOut Pointer to the parser output structure.
+  * @retval argToken_t Returns an Argument Token
+  */
+shell_error cleanParserOutput(shellParserOutput_t* cmdParseOut) {
+	shell_error status = SHELL_OK;
+
+	// clean the command
+	memset(cmdParseOut->cmdName, 0, SHELL_CMD_LEN);
+	cmdParseOut->numArgs = 0;
+
+	for (uint8_t i = 0; i < MAX_ARGUMENTS; i++) {
+		memset(cmdParseOut->cmdArgs[i].argContents, 0, SHELL_ARG_LEN);
+		cmdParseOut->cmdArgs[i].argToken = argTkn_err;
+	}
+
 	return status;
 }
 
@@ -169,12 +192,8 @@ shell_error extractArguments(shellParserOutput_t* cmdParseOut) {
 
 	uint8_t i = 0;
 	while (i < MAX_ARGUMENTS && extractArg != NULL){
-		// Copy The Argument
-		memset(cmdParseOut->cmdArgs[i].argContents, 0, strlen(extractArg) + 1);
-		memcpy(cmdParseOut->cmdArgs[i].argContents, extractArg, strlen(extractArg));
-
-		// Copy the Length. We don't care about the token
-		cmdParseOut->cmdArgs[i].argContLen = strlen(extractArg) - 1;
+		// Copy The Argument. The "extractArg + 1" is because we don't need the token as part of the argument anymore.
+		memcpy(cmdParseOut->cmdArgs[i].argContents, extractArg + 1, strlen(extractArg));
 
 		// Find and assign the argument token
 		cmdParseOut->cmdArgs[i].argToken = getTokenFromChar(extractArg[0]);
@@ -355,25 +374,6 @@ shell_error getCommand(shellParserOutput_t* cmdParserOutput, uint8_t* commandTab
 	return status;
 }
 
-/**
-  * @brief  Frees the memory
-  * @param[IN]  cmdParserOutput Parser Output Structure that holds all command/argument info
-  * @param[OUT]	commandTableIndex Index of the command within the Command Table.
-  * @retval shell_error Error Return Value
-  */
-shell_error destroyParserOutput(shellParserOutput_t* cmdParserOutput) {
-	shell_error status = SHELL_OK;
-
-	// The only memory that hasn't been freed is the argument contents
-	for (uint8_t i = 0; i < MAX_ARGUMENTS; i++) {
-		if (cmdParserOutput->cmdArgs[i].argContents != NULL) {
-			free(cmdParserOutput->cmdArgs[i].argContents);
-		}
-	}
-
-	return status;
-}
-
 /*------------------------------------------------------------------------------*/
 
 /**
@@ -401,7 +401,12 @@ shell_error shellProcessCommand(void) {
 	}
 
 	// Step 3. Fetch and run the associated function
-	shellCmdTemplateTable[commandTableIndex].runner(&parserOutput);
+	status = shellCmdTemplateTable[commandTableIndex].bridge(&parserOutput);
+	if (status != SHELL_OK){
+		shellSendResponse(RESPONSE_FNC_ERR);
+	} else {
+		shellSendResponse(RESPONSE_OK);
+	}
 
 	return status;
 }
@@ -415,6 +420,9 @@ shell_error shellParseCommand(shellParserOutput_t* cmdParseOut) {
 	shell_error status;
 	// Take care of any extra whitespace
 	scrubWhiteSpace();
+
+	// Prepare/clean the structure
+	cleanParserOutput(cmdParseOut);
 
 	// Extract the command name and length and store into the parser output
 	status = exctractCommand(cmdParseOut);
@@ -443,6 +451,11 @@ shell_error shellSendResponse(responseCode_t code) {
 	switch (code) {
 	case RESPONSE_OK:
 		strcpy(tmpBuffer, "-->OK!\r\n");
+		outputStreamChannel((uint8_t*)tmpBuffer, strlen(tmpBuffer));
+		break;
+
+	case RESPONSE_FNC_ERR:
+		strcpy(tmpBuffer, "-->Function Error!\r\n");
 		outputStreamChannel((uint8_t*)tmpBuffer, strlen(tmpBuffer));
 		break;
 
@@ -514,12 +527,14 @@ shell_error checkShellStatus(void) {
   * @param[IN]  parserInput	snapshot input from the command line parser
   * @retval shell_error Error Return Value
   */
-shell_error HelpRunner(shellParserOutput_t* parserInput) {
+shell_error HelpBridge(shellParserOutput_t* parserInput) {
 	shell_error status = SHELL_OK;
 	char tmpBuffer[500] = {0};
 
 	// Print the Header
-	sprintf(tmpBuffer, "<-- Shell Debug Kernel -->\r\n<-- Rev: %02d.%02d.%02d      -->\r\nCommand\t| Description\t\t| Arguments\r\n\r\n", SHELL_MAJOR_VER, SHELL_MINOR_VER, SHELL_REV);
+	sprintf(tmpBuffer, "<-- Shell Debug Kernel -->\r\n" \
+					   "<-- Rev: %02d.%02d.%02d      -->\r\n" \
+					   "Command\t| Description\t\t| Arguments\r\n\r\n", SHELL_MAJOR_VER, SHELL_MINOR_VER, SHELL_REV);
 
 	// Step through each command, adding help text to the buffer
 	for (uint8_t i = 0; i < NUM_OF_COMMANDS; i++) {
@@ -530,12 +545,6 @@ shell_error HelpRunner(shellParserOutput_t* parserInput) {
 	uint16_t bufLen = strlen((const char*)tmpBuffer);
 	outputStreamChannel((uint8_t*)tmpBuffer, bufLen);
 
-	return status;
-}
-
-shell_error PingRunner(shellParserOutput_t* package) {
-	shell_error status = SHELL_OK;
-	outputStreamChannel((uint8_t*)"Pong!\r\n", 7);
 	return status;
 }
 

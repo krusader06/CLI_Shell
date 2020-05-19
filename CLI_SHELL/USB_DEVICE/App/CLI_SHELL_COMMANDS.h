@@ -10,7 +10,7 @@
  *  1. Copy the command template below and paste a copy where desired (Must be within the table)
  *  2. Type the desired command
  *  3. Type the Help Description. This description will be listed whenever the help command is received.
- *  4. Input the runner. This is the function that will be called when the command is received.
+ *  4. Input the bridge. This is the function that will be called when the command is received.
  *  5. Input any arguments if necessary and update the number of arguments.
  *  6. Update the global define "NUM_OF_COMMANDS" to the total number of commands within the table.
  *
@@ -43,27 +43,38 @@ shellCmdTemplate_t shellCmdTemplateTable[NUM_OF_COMMANDS] = {
 		{
 				.cmdName = "help",
 				.helpDesc = "help\t| Display the Help Menu\t| No Arguments\r\n",
-				.runner = HelpRunner,
+				.bridge = HelpBridge,
 				.numArgs = 0,
 				.cmdArgsTable = {},
 		},
 		{
 				.cmdName = "?",
 				.helpDesc = "?\t| Display the Help Menu\t| No Arguments\r\n",
-				.runner = HelpRunner,
+				.bridge = HelpBridge,
 				.numArgs = 0,
 				.cmdArgsTable = {},
 		},
 
 		/*-------------------------------------------------*/
-		/*-----------------Ping Command--------------------*/
+		/*-----------(Test) LED Change State---------------*/
 		/*-------------------------------------------------*/
 		{
-				.cmdName = "ping",
-				.helpDesc = "ping\t| Responds \"Pong!\"\t| No Arguments\r\n",
-				.runner = PingRunner,
-				.numArgs = 0,
-				.cmdArgsTable = {},
+				.cmdName = "setLed",
+				.helpDesc = "setLed\t| Sets LED to state\t| l - LED (1 or 2) s - State (1 or 0)\r\n",
+				.bridge = LEDBridge,
+				.numArgs = 1,
+				.cmdArgsTable = {
+						{
+								.mandatory = true,
+								.type = arg_uint8,
+								.token = argTkn_l,
+						},
+						{
+								.mandatory = true,
+								.type = arg_uint8,
+								.token = argTkn_s,
+						},
+				},
 		},
 
 
